@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+langchain==0.3.10
+langchain-community==0.3.10
+langchain-core==0.3.28
+langchain-google-genai
+langchain-chroma
+chromadb
+python-dotenv
+pydantic
+tiktoken
+python-multipart
