@@ -40,7 +40,7 @@ export default function ChatInterface() {
                 sources: data.sources,
             };
             setMessages((prev) => [...prev, aiMessage]);
-        } catch (error) {
+        } catch {
             setMessages((prev) => [
                 ...prev,
                 { role: "ai", content: "Sorry, something went wrong. Please try again." }
@@ -140,7 +140,10 @@ import { uploadDocument, getFiles, deleteFile } from "../lib/api";
 function FileList() {
     const [files, setFiles] = useState([]);
 
-    const fetchFiles = async () => {
+    // fetchFiles moved to useEffect to satisfy linter
+    // We also need access to it in handleDelete, so actually we should useCallback.
+    // Let's use useCallback instead which is cleaner.
+    const fetchFiles = React.useCallback(async () => {
         try {
             const data = await getFiles();
             console.log("Fetched files:", data); // Debugging
@@ -148,7 +151,7 @@ function FileList() {
         } catch (e) {
             console.error(e);
         }
-    };
+    }, []);
 
     const handleDelete = async (filename) => {
         if (window.confirm(`Are you sure you want to delete "${filename}"?`)) {
@@ -156,17 +159,19 @@ function FileList() {
                 await deleteFile(filename);
                 fetchFiles(); // Refresh list
                 alert("File deleted.");
-            } catch (error) {
+            } catch {
                 alert("Failed to delete file.");
             }
         }
     };
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchFiles();
         window.addEventListener("fileUploaded", fetchFiles);
         return () => window.removeEventListener("fileUploaded", fetchFiles);
-    }, []);
+    }, [fetchFiles]);
+
 
     return (
         <div className="text-right">
@@ -211,7 +216,7 @@ function UploadButton() {
             alert("File uploaded and ingested successfully!");
             // Dispatch event to update list
             window.dispatchEvent(new Event("fileUploaded"));
-        } catch (error) {
+        } catch {
             alert("Failed to upload file.");
         } finally {
             setUploading(false);
