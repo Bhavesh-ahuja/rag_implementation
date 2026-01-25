@@ -22,10 +22,15 @@ def get_rag_chain():
         persist_directory=settings.CHROMA_DB_DIR,
         embedding_function=GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
     )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+    # Use MMR (Maximal Marginal Relevance) to diversify results
+    # fetch_k=20 means fetch 20 candidates, then select top 10 most diverse.
+    retriever = vectorstore.as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": 10, "fetch_k": 20, "lambda_mult": 0.7}
+    )
 
     # LLM
-    llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=settings.GOOGLE_API_KEY)
+    llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=settings.GOOGLE_API_KEY, temperature=0.3)
 
     # 1. Contextualize question (History Aware Retriever)
     contextualize_q_system_prompt = (
@@ -48,12 +53,15 @@ def get_rag_chain():
 
     # 2. Answer question (QA Chain)
     system_prompt = (
-        "You are an assistant for question-answering tasks. "
-        "Use the following pieces of retrieved context to answer "
-        "the question. If you don't know the answer, say that you "
-        "don't know. Use three sentences maximum and keep the "
-        "answer concise."
+        "You are an expert AI consultant. Your goal is to provide deep, well-structured, and comprehensive answers based on the context."
         "\n\n"
+        "Guidelines:"
+        "\n- **Structure**: Use Markdown headers (###), bullet points, and bold text to organize your answer."
+        "\n- **Detail**: Explain concepts thoroughly using the retrieved information."
+        "\n- **Objectivity**: Stick strictly to the context. If the answer is missing, say 'I cannot find the relevant information in the documents.'"
+        "\n- **Citations**: If possible, reference specific sections from the context."
+        "\n\n"
+        "Context:\n"
         "{context}"
     )
     qa_prompt = ChatPromptTemplate.from_messages(
