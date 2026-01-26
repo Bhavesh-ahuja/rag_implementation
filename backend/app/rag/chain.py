@@ -23,13 +23,14 @@ def get_rag_chain():
         embedding_function=GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
     )
     # Use MMR (Maximal Marginal Relevance) to diversify results
-    # fetch_k=20 means fetch 20 candidates, then select top 10 most diverse.
+    # fetch_k=50 improves the pool of chunks to select from.
+    # lambda_mult=0.6 balances relevance (1.0) and diversity (0.0).
     retriever = vectorstore.as_retriever(
         search_type="mmr",
-        search_kwargs={"k": 10, "fetch_k": 20, "lambda_mult": 0.7}
+        search_kwargs={"k": 12, "fetch_k": 50, "lambda_mult": 0.6}
     )
 
-    # LLM
+    # LLM - Using gemini-flash-latest (previously working alias)
     llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=settings.GOOGLE_API_KEY, temperature=0.3)
 
     # 1. Contextualize question (History Aware Retriever)
@@ -56,10 +57,11 @@ def get_rag_chain():
         "You are an expert AI consultant. Your goal is to provide deep, well-structured, and comprehensive answers based on the context."
         "\n\n"
         "Guidelines:"
-        "\n- **Structure**: Use Markdown headers (###), bullet points, and bold text to organize your answer."
-        "\n- **Detail**: Explain concepts thoroughly using the retrieved information."
+        "\n- **Think Step-by-Step**: Before answering, briefly analyze the retrieved context to synthesize the best answer."
+        "\n- **Structure**: Use Markdown headers (###), bullet points, and bold text to organize your answer. Do not use generic introductions."
+        "\n- **Detail**: Explain concepts thoroughly using the retrieved information. Avoid superficial summaries."
         "\n- **Objectivity**: Stick strictly to the context. If the answer is missing, say 'I cannot find the relevant information in the documents.'"
-        "\n- **Citations**: If possible, reference specific sections from the context."
+        "\n- **Citations**: Reference specific sections or source documents from the context where possible."
         "\n\n"
         "Context:\n"
         "{context}"
