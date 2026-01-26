@@ -156,14 +156,18 @@ function FileList() {
     const handleDelete = async (filename) => {
         if (window.confirm(`Are you sure you want to delete "${filename}"?`)) {
             try {
+                // Optimistically remove or show loading could be here, but simple alert is fine for now
                 await deleteFile(filename);
-                fetchFiles(); // Refresh list
+                // Dispatch/refresh logic is in useEffect
+                fetchFiles();
                 alert("File deleted.");
-            } catch {
-                alert("Failed to delete file.");
+            } catch (e) {
+                console.error(e);
+                alert("Failed to delete file. It may have already been removed.");
             }
         }
     };
+
 
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect

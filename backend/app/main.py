@@ -28,8 +28,8 @@ app = FastAPI(title="RAG AI Agent", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://rag-implementation-seven.vercel.app"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -71,40 +71,57 @@ async def chat(request: ChatRequest):
 from fastapi import UploadFile, File
 import shutil
 import os
+import asyncio
 from app.rag.ingestion import ingest_documents
+
+# Lock for concurrency control
+chain_lock = asyncio.Lock()
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     global rag_chain
-    try:
-        # Save file to backend/data
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # backend/app -> backend
-        project_root = os.path.dirname(current_dir)
-        data_path = os.path.join(project_root, "data")
-        
-        if not os.path.exists(data_path):
-            os.makedirs(data_path)
+    
+    # 1. Validate File Extension
+    allowed_extensions = {".pdf", ".txt", ".md"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {allowed_extensions}")
+
+    # 2. Sanitize Filename (Path Traversal Fix)
+    # os.path.basename removes any directory components (e.g. "../../")
+    safe_filename = os.path.basename(file.filename)
+    
+    async with chain_lock:
+        try:
+            # Save file to backend/data
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # backend/app -> backend
+            project_root = os.path.dirname(current_dir)
+            data_path = os.path.join(project_root, "data")
             
-        file_path = os.path.join(data_path, file.filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            if not os.path.exists(data_path):
+                os.makedirs(data_path)
+                
+            file_path = os.path.join(data_path, safe_filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+                
+            # Re-run ingestion
+            # Note: Running sync function in async path. For heavy load, consider run_in_executor.
+            ingest_documents()
             
-        # Re-run ingestion
-        ingest_documents()
-        
-        # Re-initialize chain
-        rag_chain = get_rag_chain()
-        
-        return {"message": f"Successfully uploaded {file.filename} and processed documents."}
-    except ValueError as ve:
-        # Catch the specific empty text error
-        # Cleanup the useless file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            # Re-initialize chain
+            rag_chain = get_rag_chain()
+            
+            return {"message": f"Successfully uploaded {safe_filename} and processed documents."}
+        except ValueError as ve:
+            # Catch the specific empty text error
+            # Cleanup the useless file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=400, detail=str(ve))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/files")
 async def list_files():
@@ -119,7 +136,7 @@ async def list_files():
             
         files = [f for f in os.listdir(data_path) if os.path.isfile(os.path.join(data_path, f))]
         # exclude .gitkeep if present, optional
-        files = [f for f in files if f != ".gitkeep"]
+        files = [f for f in files if f != ".gitkeep" and f != "chat_history.db"]
         
         return {"files": files}
     except Exception as e:
@@ -128,23 +145,28 @@ async def list_files():
 @app.delete("/files/{filename}")
 async def delete_file(filename: str):
     global rag_chain
-    try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        data_path = os.path.join(project_root, "data")
-        file_path = os.path.join(data_path, filename)
-        
-        if os.path.exists(file_path):
-            os.remove(file_path)
+    
+    # Sanitize filename (Path Traversal Fix)
+    safe_filename = os.path.basename(filename)
+    
+    async with chain_lock:
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)
+            data_path = os.path.join(project_root, "data")
+            file_path = os.path.join(data_path, safe_filename)
             
-            # Re-run ingestion to update vector store
-            ingest_documents()
-            
-            # Re-initialize chain
-            rag_chain = get_rag_chain()
-            
-            return {"message": f"Deleted {filename}"}
-        else:
-             raise HTTPException(status_code=404, detail="File not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                
+                # Re-run ingestion to update vector store
+                ingest_documents()
+                
+                # Re-initialize chain
+                rag_chain = get_rag_chain()
+                
+                return {"message": f"Deleted {safe_filename}"}
+            else:
+                 raise HTTPException(status_code=404, detail="File not found")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))

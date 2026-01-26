@@ -4,17 +4,26 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_chroma import Chroma
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.chat_history import BaseChatMessageHistory
-from app.core.config import settings
+from langchain_community.chat_message_histories import SQLChatMessageHistory
+import os
 
-# In-memory storage for session history
-store = {}
+# Ensure data directory exists for the database
+# Get the absolute path to the backend directory
+# Logic: chain.py is in backend/app/rag
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# current_dir -> backend/app/rag
+# parent -> backend/app
+# parent -> backend
+backend_dir = os.path.dirname(os.path.dirname(current_dir))
+db_path = os.path.join(backend_dir, "data", "chat_history.db")
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    if session_id not in store:
-        store[session_id] = ChatMessageHistory()
-    return store[session_id]
+    # Use SQLite for persistence
+    # connection_string format: sqlite:///path/to/db
+    return SQLChatMessageHistory(
+        session_id=session_id,
+        connection_string=f"sqlite:///{db_path}"
+    )
 
 def get_rag_chain():
     # Initialize Vector Store Retriever
