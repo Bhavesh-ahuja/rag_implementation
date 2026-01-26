@@ -1,8 +1,9 @@
 import os
+import time
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_chroma import Chroma
+from langchain_pinecone import PineconeVectorStore
 from app.core.config import settings
 
 def ingest_documents():
@@ -40,7 +41,6 @@ def ingest_documents():
     total_content_length = sum(len(doc.page_content.strip()) for doc in documents)
     if total_content_length == 0:
         print("Error: Documents found but extracted text length is 0. Possible scanned/image-based PDF.")
-        # We should probably raise an exception here so the API knows it failed
         raise ValueError("No text could be extracted from the document. It might be a scanned image.")
 
     # Split documents
@@ -48,32 +48,25 @@ def ingest_documents():
     splits = text_splitter.split_documents(documents)
     print(f"Split {len(documents)} documents into {len(splits)} chunks.")
 
-    # Embed and Store
+    # Embed and Store in Pinecone
     if splits:
-        # Initialize client to potentially clear existing collection
-        # For simplicity in this demo, we will re-create the collection or we can check ids.
-        # A simple robust way for "re-ingest all" is to delete the DB dir or use reset.
-        # Here we will try to use the vectorstore object to delete collection if possible,
-        # or just overwrite by re-initializing fresh if we nuked the dir in main.py (which we didn't).
+        print("Initializing Pinecone VectorStore...")
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
         
-        # Better approach: Initialize Chroma, delete collection, then add.
-        vectorstore = Chroma(
-            persist_directory=settings.CHROMA_DB_DIR,
-            embedding_function=GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
-        )
-        
-        try:
-            # Attempt to clear existing documents to avoid duplicates on re-ingestion
-            # Chroma's delete_collection or getting all IDs and deleting them
-            ids = vectorstore.get()["ids"]
-            if ids:
-                vectorstore.delete(ids)
-                print(f"Deleted {len(ids)} existing documents to prevent duplication.")
-        except Exception as e:
-            print(f"Warning during cleanup: {e}")
+        # We assume the index already exists (User created it in Pinecone Console)
+        # Verify index name
+        index_name = settings.PINECONE_INDEX_NAME
+        if not index_name:
+             raise ValueError("PINECONE_INDEX_NAME not set in environment variables.")
 
-        vectorstore.add_documents(documents=splits)
-        print("Documents ingested and stored in ChromaDB.")
+        # Ingest
+        # This will automatically compute embeddings and upsert
+        PineconeVectorStore.from_documents(
+            documents=splits,
+            embedding=embeddings,
+            index_name=index_name
+        )
+        print("Documents ingested and stored in Pinecone.")
 
 if __name__ == "__main__":
     ingest_documents()

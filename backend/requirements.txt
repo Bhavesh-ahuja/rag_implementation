@@ -10,3 +10,7 @@ python-dotenv
 pydantic
 tiktoken
 python-multipart
+langchain-pinecone
+pinecone-client
+langchain-mongodb
+pymongo

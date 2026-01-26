@@ -3,37 +3,29 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_chroma import Chroma
-from langchain_community.chat_message_histories import SQLChatMessageHistory
+from langchain_pinecone import PineconeVectorStore
+from langchain_mongodb import MongoDBChatMessageHistory
 import os
+from app.core.config import settings
 
-# Ensure data directory exists for the database
-# Get the absolute path to the backend directory
-# Logic: chain.py is in backend/app/rag
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# current_dir -> backend/app/rag
-# parent -> backend/app
-# parent -> backend
-backend_dir = os.path.dirname(os.path.dirname(current_dir))
-db_path = os.path.join(backend_dir, "data", "chat_history.db")
-
-def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    # Use SQLite for persistence
-    # connection_string format: sqlite:///path/to/db
-    return SQLChatMessageHistory(
+def get_session_history(session_id: str):
+    return MongoDBChatMessageHistory(
         session_id=session_id,
-        connection_string=f"sqlite:///{db_path}"
+        connection_string=settings.MONGO_URI,
+        database_name="rag_chat_history",
+        collection_name="chat_sessions",
     )
 
 def get_rag_chain():
-    # Initialize Vector Store Retriever
-    vectorstore = Chroma(
-        persist_directory=settings.CHROMA_DB_DIR,
-        embedding_function=GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
+    # Initialize Pinecone Vector Store
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
+    
+    vectorstore = PineconeVectorStore(
+        index_name=settings.PINECONE_INDEX_NAME,
+        embedding=embeddings
     )
+    
     # Use MMR (Maximal Marginal Relevance) to diversify results
-    # fetch_k=50 improves the pool of chunks to select from.
-    # lambda_mult=0.6 balances relevance (1.0) and diversity (0.0).
     retriever = vectorstore.as_retriever(
         search_type="mmr",
         search_kwargs={"k": 12, "fetch_k": 50, "lambda_mult": 0.6}
