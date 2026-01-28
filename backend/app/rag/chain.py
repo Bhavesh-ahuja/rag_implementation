@@ -18,7 +18,7 @@ def get_session_history(session_id: str):
 
 def get_rag_chain():
     # Initialize Pinecone Vector Store
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=settings.GOOGLE_API_KEY)
     
     vectorstore = PineconeVectorStore(
         index_name=settings.PINECONE_INDEX_NAME,

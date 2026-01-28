@@ -1,7 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Explicitly load .env from the backend root directory
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
+load_dotenv(env_path)
 
 class Settings:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -11,3 +13,9 @@ class Settings:
     MONGO_URI = os.getenv("MONGO_URI")
 
 settings = Settings()
+
+# Debug print to verify loading (do not print actual secrets in production logs ideally, but helpful here)
+if not settings.MONGO_URI:
+    print(f"WARNING: MONGO_URI not found in .env at {env_path}")
+else:
+    print(f"SUCCESS: MONGO_URI loaded successfully.")
