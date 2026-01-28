@@ -35,7 +35,16 @@ export const uploadDocument = async (file) => {
         });
 
         if (!response.ok) {
-            throw new Error(`Error: ${response.statusText}`);
+            let errorMessage = `Error: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                }
+            } catch (e) {
+                // Could not parse JSON, stick to statusText
+            }
+            throw new Error(errorMessage);
         }
 
         return await response.json();

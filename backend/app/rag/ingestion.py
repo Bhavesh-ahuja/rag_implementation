@@ -51,22 +51,27 @@ def ingest_documents():
     # Embed and Store in Pinecone
     if splits:
         print("Initializing Pinecone VectorStore...")
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=settings.GOOGLE_API_KEY)
-        
-        # We assume the index already exists (User created it in Pinecone Console)
-        # Verify index name
-        index_name = settings.PINECONE_INDEX_NAME
-        if not index_name:
-             raise ValueError("PINECONE_INDEX_NAME not set in environment variables.")
-
-        # Ingest
-        # This will automatically compute embeddings and upsert
-        PineconeVectorStore.from_documents(
-            documents=splits,
-            embedding=embeddings,
-            index_name=index_name
-        )
-        print("Documents ingested and stored in Pinecone.")
+        try:
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=settings.GOOGLE_API_KEY)
+            
+            # We assume the index already exists (User created it in Pinecone Console)
+            # Verify index name
+            index_name = settings.PINECONE_INDEX_NAME
+            if not index_name:
+                 raise ValueError("PINECONE_INDEX_NAME not set in environment variables.")
+    
+            # Ingest
+            # This will automatically compute embeddings and upsert
+            PineconeVectorStore.from_documents(
+                documents=splits,
+                embedding=embeddings,
+                index_name=index_name
+            )
+            print("Documents ingested and stored in Pinecone.")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
 if __name__ == "__main__":
     ingest_documents()

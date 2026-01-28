@@ -220,8 +220,9 @@ function UploadButton() {
             alert("File uploaded and ingested successfully!");
             // Dispatch event to update list
             window.dispatchEvent(new Event("fileUploaded"));
-        } catch {
-            alert("Failed to upload file.");
+            window.dispatchEvent(new Event("fileUploaded"));
+        } catch (error) {
+            alert(`Failed to upload file: ${error.message}`);
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
